@@ -38,10 +38,6 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-*.pkl
-*.pth
-*.npz
-*.npy
 # *.png
 MANIFEST
 
