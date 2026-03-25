@@ -10,7 +10,6 @@ from collections import deque
 from core.environment.tasks import Task
 from core.recorder import PybulletRecorder
 from core.planner.cbs import ConflictBasedSearch
-from core.planner.agent_planners import Agent, ResolveDualConflict
 from application.task import (
     PolicyTask,
     UR5AsyncTaskRunner as TaskRunner,
@@ -47,11 +46,23 @@ class Executer:
         self.parameters = parameters
         self.num_agents = len(self.ur5s)
 
+        backbone = parameters.get("backbone", "diffusion")
+        if backbone == "flow":
+            from core.planner.flow_agent_planners import (
+                FlowAgent as _AgentCls,
+                FlowResolveDualConflict as _DualCls,
+            )
+        else:
+            from core.planner.agent_planners import (
+                Agent as _AgentCls,
+                ResolveDualConflict as _DualCls,
+            )
+
         self.single_agent_planners = {
-            arm_id: Agent(id=arm_id, arm=self.ur5s[arm_id], parameters=parameters)
+            arm_id: _AgentCls(id=arm_id, arm=self.ur5s[arm_id], parameters=parameters)
             for arm_id in range(self.num_agents)
         }
-        self.dual_agent_planner = ResolveDualConflict(
+        self.dual_agent_planner = _DualCls(
             self.ur5s, self.get_observation, self.preprocess_observation, parameters
         )
         self.state_deque = deque(

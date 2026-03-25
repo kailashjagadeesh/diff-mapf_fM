@@ -62,7 +62,9 @@ class Parameters:
     timeout: int = 600
     action_dim: int = 6
     num_samples: int = 10
-    n_timesteps: int = 100
+    n_timesteps: int = 100   # used by diffusion backbone
+    n_steps: int = 10        # used by flow matching backbone
+    backbone: str = "diffusion"  # "diffusion" | "flow"
     action_horizon: int = 1
     observation_dim: int = 57
     prediction_horizon: int = 16
@@ -312,7 +314,17 @@ if __name__ == "__main__":
     parser.add_argument("--action_dim", type=int, default=6, help="Action dimension")
     parser.add_argument("--num_samples", type=int, default=10, help="Number of samples")
     parser.add_argument(
-        "--n_timesteps", type=int, default=100, help="Number of timesteps"
+        "--n_timesteps", type=int, default=100, help="Number of diffusion denoising steps (diffusion backbone)"
+    )
+    parser.add_argument(
+        "--n_steps", type=int, default=10, help="Number of ODE integration steps (flow matching backbone)"
+    )
+    parser.add_argument(
+        "--backbone",
+        type=str,
+        default="diffusion",
+        choices=["diffusion", "flow"],
+        help="Policy backbone: 'diffusion' (DDPM) or 'flow' (flow matching)",
     )
     parser.add_argument("--action_horizon", type=int, default=1, help="Action horizon")
     parser.add_argument(
@@ -357,6 +369,8 @@ if __name__ == "__main__":
         action_dim=args.action_dim,
         num_samples=args.num_samples,
         n_timesteps=args.n_timesteps,
+        n_steps=args.n_steps,
+        backbone=args.backbone,
         action_horizon=args.action_horizon,
         observation_dim=args.observation_dim,
         dual_agent_model=args.dual_agent_model,
