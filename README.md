@@ -1,8 +1,6 @@
 # Diffusion-Guided Multi-Arm Motion Planning
 
-[Viraj Parimi](https://people.csail.mit.edu/vparimi/), [Brian Williams](https://www.csail.mit.edu/person/brian-williams)
-Massachusetts Institute of Technology
-**[CoRL 2025](https://www.corl.org/)**
+
 
 **Project:** [diff-mapf-mers.csail.mit.edu](https://diff-mapf-mers.csail.mit.edu/) • **Paper:** [arXiv:2509.08160](https://arxiv.org/abs/2509.08160)
 
@@ -15,6 +13,7 @@ Massachusetts Institute of Technology
 - [Pre-Trained Models & Data](#pre-trained-models-and-data)
 - [Evaluate](#evaluate)
 - [Summarize Results](#summarize-results)
+- [Render Videos](#render-videos)
 - [Train From Scratch](#train-from-scratch)
 - [Flow Matching Pipeline](#flow-matching-pipeline)
 - [Repository Layout](#repository-layout)
@@ -140,6 +139,69 @@ Works identically for diffusion and flow matching runs — the results CSV forma
 
 ---
 
+## Render Videos
+
+Simulations are recorded as `.pkl` files by `PybulletRecorder` during every eval run. Use `application/render_video.py` to convert them to `.mp4` — no GUI needed, works fully headless.
+
+### Convert a full run
+```bash
+python application/render_video.py \
+    --pkl_dir runs/<backbone>/<timestamp>/simulation_<timestamp>
+```
+This finds all `.pkl` files recursively under the directory and writes a matching `.mp4` next to each one.
+
+### Convert a single experiment
+```bash
+python application/render_video.py \
+    --pkl runs/<backbone>/<timestamp>/simulation_<timestamp>/simulation_42.pkl
+```
+
+### Custom output path
+```bash
+python application/render_video.py \
+    --pkl runs/.../simulation_42.pkl \
+    --output videos/experiment_42.mp4
+```
+
+### All options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--pkl` | — | Path to a single `.pkl` file (mutually exclusive with `--pkl_dir`) |
+| `--pkl_dir` | — | Directory to search recursively for `.pkl` files |
+| `--output` | same path as `.pkl` with `.mp4` extension | Output path (single-file mode only) |
+| `--width` | `1280` | Video width in pixels |
+| `--height` | `720` | Video height in pixels |
+| `--fps` | `30` | Frames per second |
+| `--egl` | off | Use GPU EGL renderer instead of CPU software renderer |
+| `--yaw` | `46.39` | Camera yaw in degrees |
+| `--pitch` | `-55.0` | Camera pitch in degrees |
+| `--dist` | `1.9` | Camera distance from scene centre |
+
+### CPU vs GPU rendering
+
+By default the script uses `ER_TINY_RENDERER` (PyBullet's built-in CPU software renderer) — no extra dependencies needed. On Linux with EGL drivers (e.g. an RTX 4090), pass `--egl` to use GPU-accelerated rendering which is significantly faster for high-resolution or long rollouts:
+
+```bash
+python application/render_video.py --pkl_dir runs/.../simulation_<timestamp> \
+    --egl --width 1920 --height 1080 --fps 60
+```
+
+### Typical workflow
+```bash
+# 1. Run evaluation headlessly (saves .pkl per experiment automatically)
+python application/demo.py --backbone flow \
+    --single_agent_model runs/flow_single/.../ckpt_single_agent_model_00100 \
+    --dual_agent_model   runs/flow_dual/.../ckpt_dual_agent_model_00100 \
+    --num_experiments 100
+
+# 2. Convert all saved simulations to video
+python application/render_video.py \
+    --pkl_dir runs/flow_dual/<timestamp>/simulation_<timestamp>
+```
+
+---
+
 ## Train From Scratch
 
 ### Download Expert Datasets
@@ -245,25 +307,20 @@ python -u core/flow_agent_manager.py \
 | `unet_layers` *(in config)* | `[256,512,1024]` | `[256,512,1024]` | Identical to diffusion config |
 
 ### Checkpoint format
-Flow matching checkpoints save a `.pth` model file **and** a matching `.npz` normalization stats file:
+Flow matching checkpoints save a model weights file **and** a matching `.npz` normalization stats file alongside it:
 ```
 runs/flow_single_agent/<timestamp>/
   ckpt_single_agent_model_00001       ← model weights (no extension)
   ckpt_single_agent_model_00001.npz   ← normalization stats (auto-saved)
   ...
 ```
-When pointing `--single_agent_model` to a checkpoint, the path must end in `.pth` with the `.npz` alongside it. Rename or symlink accordingly, e.g.:
-```bash
-cp runs/flow_single_agent/<timestamp>/ckpt_single_agent_model_00300 \
-   runs/flow_single_agent/<timestamp>/ckpt_single_agent_model_00300.pth
-```
-(The `.npz` is already named with `.npz` extension automatically.)
+Pass the weights path directly — no renaming needed. The planner derives the stats path automatically using `os.path.splitext`, which handles paths with or without a `.pth` extension.
 
 ### Eval with flow matching backbone
 ```bash
 python application/demo.py \
-    --single_agent_model "runs/flow_single_agent/<timestamp>/ckpt_single_agent_model_00300.pth" \
-    --dual_agent_model   "runs/flow_dual_agent/<timestamp>/ckpt_dual_agent_model_00300.pth" \
+    --single_agent_model "runs/flow_single_agent/<timestamp>/ckpt_single_agent_model_00100" \
+    --dual_agent_model   "runs/flow_dual_agent/<timestamp>/ckpt_dual_agent_model_00100" \
     --backbone flow \
     --n_steps 10 \
     --num_samples 10

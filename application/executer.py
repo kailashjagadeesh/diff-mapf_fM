@@ -4,6 +4,7 @@ import pybullet as p
 from typing import List
 from random import randint
 from itertools import chain
+import torch
 from torch import FloatTensor
 from collections import deque
 
@@ -284,16 +285,17 @@ class Executer:
     def preprocess_observation(self, observation):
         output = []
         for ur5_obs in observation["ur5s"]:
-            ur5_output = np.array([])
-            for key in self.obs_key:
-                item = ur5_obs[key]
-                for history_frame in item:
-                    ur5_output = np.concatenate((ur5_output, history_frame))
-            if len(ur5_output) == 0:
+            parts = [
+                frame
+                for key in self.obs_key
+                for frame in ur5_obs[key]
+            ]
+            if not parts:
                 continue
-            output.append(ur5_output)
-        output = FloatTensor(output)
-        return output
+            output.append(np.concatenate(parts))
+        if not output:
+            return FloatTensor([])
+        return torch.from_numpy(np.stack(output)).float()
 
     def try_save(self):
         if self.recorder:

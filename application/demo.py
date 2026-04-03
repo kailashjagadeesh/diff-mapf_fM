@@ -256,8 +256,8 @@ def check_success(targets, bin):
     return all(target_in_bins)
 
 
-def demo_with_seed(seed, result_dir, recorder_dir, parameters):
-    configure_pybullet(rendering=False, debug=False)
+def demo_with_seed(seed, result_dir, recorder_dir, parameters, rendering=False):
+    configure_pybullet(rendering=rendering, debug=False)
     random_seed(seed)
     result_filepath = os.path.join(result_dir, "results.csv")
 
@@ -361,6 +361,18 @@ if __name__ == "__main__":
         default=60,
         help="Timeout for the application (in seconds)",
     )
+    parser.add_argument(
+        "--render",
+        action="store_true",
+        default=False,
+        help="Enable PyBullet GUI rendering",
+    )
+    parser.add_argument(
+        "--num_experiments",
+        type=int,
+        default=100,
+        help="Number of experiments to run",
+    )
     args = parser.parse_args()
 
     parameters = Parameters(
@@ -391,7 +403,7 @@ if __name__ == "__main__":
     num_valids = 0
     num_successes = 0
     experiment_id = 0
-    num_experiments = 100
+    num_experiments = args.num_experiments
     with tqdm(
         total=num_experiments - experiment_id, dynamic_ncols=True, desc="Running Application"
     ) as pbar:
@@ -401,6 +413,7 @@ if __name__ == "__main__":
                 result_dir=result_dir,
                 recorder_dir=recorder_dir,
                 parameters=parameters,
+                rendering=args.render,
             )
             info = result["info"]
             # print(f"Info: {info}:")

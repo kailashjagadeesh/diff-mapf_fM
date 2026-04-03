@@ -8,6 +8,7 @@ Key differences from diffusion planners:
   - No DDPMScheduler dependency
 """
 
+import os
 import torch
 import numpy as np
 from itertools import islice
@@ -43,6 +44,7 @@ class FlowAgent:
             * self.parameters["observation_horizon"],
         )
         self.model.to(self.device)
+        self.model.eval()
 
         ckpt = torch.load(
             self.parameters["single_agent_model"], map_location=self.device
@@ -50,11 +52,23 @@ class FlowAgent:
         networks = ckpt["networks"]
         self.model.load_state_dict(networks["velocity_network"])
 
-        # Load normalization stats (.npz saved alongside checkpoint)
-        self.stats = np.load(
-            self.parameters["single_agent_model"].replace(".pth", ".npz"),
-            allow_pickle=True,
-        )
+        # Load normalization stats (.npz saved alongside checkpoint).
+        # Use splitext so this works whether or not the path ends in ".pth".
+        stats_path = os.path.splitext(self.parameters["single_agent_model"])[0] + ".npz"
+        self.stats = np.load(stats_path, allow_pickle=True)
+
+        # Precompute ODE timestep tensors once — reused every predict_plan call
+        num_samples = self.parameters["num_samples"]
+        self._dt = 1.0 / self.n_steps
+        self._t_tensors = [
+            torch.full(
+                (num_samples,),
+                i / self.n_steps * 1000.0,
+                device=self.device,
+                dtype=torch.float32,
+            )
+            for i in range(self.n_steps)
+        ]
         action_stats = dict(self.stats["actions"].flatten()[0])
         observation_stats = dict(self.stats["obs"].flatten()[0])
         self.stats = dict(obs=observation_stats, action=action_stats)
@@ -94,16 +108,12 @@ class FlowAgent:
             )
 
             # Euler ODE: integrate v_theta from t=0 to t=1
-            dt = 1.0 / self.n_steps
-            for i in range(self.n_steps):
-                t_val = i / self.n_steps * 1000.0  # scale to sinusoidal embed range
-                t_tensor = torch.full(
-                    (num_samples,), t_val, device=self.device, dtype=torch.float32
-                )
+            # t_tensors and dt are precomputed at __init__ time
+            for t_tensor in self._t_tensors:
                 velocity = self.model(
                     sample=x, timestep=t_tensor, global_cond=observation
                 )
-                x = x + dt * velocity
+                x = x + self._dt * velocity
 
         naction = x.detach().cpu().numpy()
         naction = unnormalize_data(naction, stats=self.stats["action"])
@@ -132,6 +142,7 @@ class FlowResolveDualConflict:
             * 2,
         )
         self.model.to(self.device)
+        self.model.eval()
 
         ckpt = torch.load(
             self.parameters["dual_agent_model"], map_location=self.device
@@ -139,15 +150,27 @@ class FlowResolveDualConflict:
         networks = ckpt["networks"]
         self.model.load_state_dict(networks["velocity_network"])
 
-        # Load normalization stats
-        self.stats = np.load(
-            self.parameters["dual_agent_model"].replace(".pth", ".npz"),
-            allow_pickle=True,
-        )
+        # Load normalization stats (.npz saved alongside checkpoint).
+        # Use splitext so this works whether or not the path ends in ".pth".
+        stats_path = os.path.splitext(self.parameters["dual_agent_model"])[0] + ".npz"
+        self.stats = np.load(stats_path, allow_pickle=True)
         action_stats = dict(self.stats["actions"].flatten()[0])
         observation_stats = dict(self.stats["obs"].flatten()[0])
         self.stats = dict(obs=observation_stats, action=action_stats)
         self.conflict_cache = set()
+
+        # Precompute ODE timestep tensors once — reused every predict_plan call
+        num_samples = self.parameters["num_samples"]
+        self._dt = 1.0 / self.n_steps
+        self._t_tensors = [
+            torch.full(
+                (num_samples,),
+                i / self.n_steps * 1000.0,
+                device=self.device,
+                dtype=torch.float32,
+            )
+            for i in range(self.n_steps)
+        ]
 
     def predict_plan(self, conflict, agents_deque):
         """
@@ -194,16 +217,12 @@ class FlowResolveDualConflict:
             )
 
             # Euler ODE: integrate v_theta from t=0 to t=1
-            dt = 1.0 / self.n_steps
-            for i in range(self.n_steps):
-                t_val = i / self.n_steps * 1000.0  # scale to sinusoidal embed range
-                t_tensor = torch.full(
-                    (num_samples,), t_val, device=self.device, dtype=torch.float32
-                )
+            # t_tensors and dt are precomputed at __init__ time
+            for t_tensor in self._t_tensors:
                 velocity = self.model(
                     sample=x, timestep=t_tensor, global_cond=ego_observation
                 )
-                x = x + dt * velocity
+                x = x + self._dt * velocity
 
         naction = x.detach().cpu().numpy()
         naction = unnormalize_data(naction, stats=self.stats["action"])
