@@ -33,10 +33,10 @@ if __name__ == "__main__":
     dataloader = DataLoader(
         dataset,
         batch_size=hyperparameters["batch_size"],
-        num_workers=0,
-        shuffle=False,
+        num_workers=16,
+        shuffle=True,
         pin_memory=True,
-        persistent_workers=False,
+        persistent_workers=True,
     )
 
     motion_planning_learner = create_agent(
