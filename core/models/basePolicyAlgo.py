@@ -1,3 +1,5 @@
+import glob
+import os
 import torch
 
 
@@ -8,6 +10,7 @@ class BasePolicyAlgo:
         writer,
         load_path=None,
         save_interval=0,
+        keep_last=1,
         device="cuda",
     ):
         self.device = device
@@ -15,6 +18,7 @@ class BasePolicyAlgo:
         self.policy_key = policy_key
         self.load_path = load_path
         self.save_interval = save_interval
+        self.keep_last = keep_last
 
         if self.writer is not None:
             self.logdir = self.writer.get_logdir()
@@ -52,3 +56,11 @@ class BasePolicyAlgo:
                     self.policy_key, output_path
                 )
             )
+
+            if eval is None and self.keep_last > 0:
+                pattern = os.path.join(self.logdir, f"ckpt_{self.policy_key}_*")
+                ckpts = sorted(c for c in glob.glob(pattern) if not c.endswith(".npz"))
+                for old in ckpts[: -self.keep_last]:
+                    os.remove(old)
+                    if os.path.exists(old + ".npz"):
+                        os.remove(old + ".npz")

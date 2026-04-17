@@ -56,7 +56,7 @@
       }
     },
     "update_interval": 16000,
-    "save_interval": 1,
+    "save_interval": 10,
     "num_processes": 1
   },
   "environment": {
