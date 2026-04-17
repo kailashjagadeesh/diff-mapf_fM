@@ -34,7 +34,8 @@ class FlowAgent:
         self.current_task = None
         self.parameters = parameters
         self.observation_deque = deque(maxlen=self.parameters["observation_horizon"])
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        _dev = parameters.get("device", None)
+        self.device = torch.device(_dev) if _dev else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.n_steps = self.parameters.get("n_steps", 10)
 
         # Reuse the same ConditionalUnet1D backbone as the diffusion planner
@@ -131,7 +132,8 @@ class FlowResolveDualConflict:
         self.parameters = parameters
         self.get_observation_fn = get_observation_fn
         self.preprocess_observation_fn = preprocess_observation_fn
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        _dev = parameters.get("device", None)
+        self.device = torch.device(_dev) if _dev else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.n_steps = self.parameters.get("n_steps", 10)
 
         # Dual-arm model: observation_dim * observation_horizon * 2 (two agents)

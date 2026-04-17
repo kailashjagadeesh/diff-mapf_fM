@@ -71,6 +71,7 @@ class Parameters:
     observation_horizon: int = 2
     dual_agent_model: str = "runs/plain_diffusion/mini_custom_diffusion_2.pth"
     single_agent_model: str = "runs/plain_diffusion/mini_custom_diffusion_1.pth"
+    device: str = None
 
 
 def set_initial_random_configs(ur5s, randomization_magnitude=0.4):
@@ -383,6 +384,12 @@ if __name__ == "__main__":
         default=100,
         help="Number of experiments to run",
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help="PyTorch device for model inference (default: auto-detect)",
+    )
     args = parser.parse_args()
 
     parameters = Parameters(
@@ -399,6 +406,7 @@ if __name__ == "__main__":
         single_agent_model=args.single_agent_model,
         prediction_horizon=args.prediction_horizon,
         observation_horizon=args.observation_horizon,
+        device=args.device,
     )
 
     parent_dir = Path(parameters.dual_agent_model).parent

@@ -72,6 +72,7 @@ class Parameters:
     observation_horizon: int = 2
     dual_agent_model: str = "runs/plain_diffusion/mini_custom_diffusion_2.pth"
     single_agent_model: str = "runs/plain_diffusion/mini_custom_diffusion_1.pth"
+    device: str = "cpu"
 
 
 def set_initial_random_configs(ur5s, randomization_magnitude=0.4):
@@ -390,6 +391,12 @@ if __name__ == "__main__":
         default=4,
         help="Number of parallel workers for experiments",
     )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cpu",
+        help="PyTorch device for model inference in workers (default: cpu to avoid GPU OOM)",
+    )
     args = parser.parse_args()
 
     parameters = Parameters(
@@ -406,6 +413,7 @@ if __name__ == "__main__":
         single_agent_model=args.single_agent_model,
         prediction_horizon=args.prediction_horizon,
         observation_horizon=args.observation_horizon,
+        device=args.device,
     )
 
     parent_dir = Path(parameters.dual_agent_model).parent
@@ -422,12 +430,29 @@ if __name__ == "__main__":
     num_experiments = args.num_experiments
     max_workers = args.num_workers
 
-    # Note: We must restrict concurrent execution from trying to use PyBullet GUI 
-    # simultaneously if rendering is enabled. ProcessPoolExecutor can crash easily 
+    # Note: We must restrict concurrent execution from trying to use PyBullet GUI
+    # simultaneously if rendering is enabled. ProcessPoolExecutor can crash easily
     # with multiple GUI instances.
     if args.render and max_workers > 1:
         print("Warning: Setting max_workers=1 because --render is active.")
         max_workers = 1
+
+    failed_seeds = set()
+
+    def _record_result(result, simulation_pkl_path):
+        write_csv_line(os.path.join(result_dir, "results.csv"), result)
+        info = result["info"]
+        if info is not None:
+            robot_collided = info[1] == "ur5_robotiq" and info[2] == "ur5_robotiq"
+            robot_collided = robot_collided or info[2] == "plane"
+            is_valid = robot_collided or result["success"]
+        else:
+            is_valid = True
+        if is_valid:
+            print(f'\nExperiment {result["experiment"]}:')
+            print(f'\tSuccess: {result["success"]}')
+            print(f"\tPath: {simulation_pkl_path}")
+        return int(is_valid), int(result["success"])
 
     with tqdm(
         total=num_experiments, dynamic_ncols=True, desc="Running Application"
@@ -444,36 +469,39 @@ if __name__ == "__main__":
                 ): experiment_id
                 for experiment_id in range(num_experiments)
             }
-            
+
             for future in concurrent.futures.as_completed(futures):
                 experiment_id = futures[future]
                 try:
                     result, simulation_pkl_path = future.result()
-                    
-                    write_csv_line(os.path.join(result_dir, "results.csv"), result)
-                    
-                    info = result["info"]
-                    if info is not None:
-                        robot_collided = info[1] == "ur5_robotiq" and info[2] == "ur5_robotiq"
-                        robot_collided = robot_collided or info[2] == "plane"
-                        is_valid = robot_collided or result["success"]
-                    else:
-                        is_valid = True
-                        
-                    num_valids += int(is_valid)
-                    num_successes += int(result["success"])
-                    
-                    if is_valid:
-                        print(f'\nExperiment {result["experiment"]}:')
-                        print(f'\tSuccess: {result["success"]}')
-                        print(f"\tPath: {simulation_pkl_path}")
-                        
+                    v, s = _record_result(result, simulation_pkl_path)
+                    num_valids += v
+                    num_successes += s
                 except Exception as exc:
-                    print(f'\nExperiment {experiment_id} generated an exception: {exc}')
-                
+                    print(f'\nExperiment {experiment_id} failed: {exc} — will retry')
+                    failed_seeds.add(experiment_id)
+
                 pbar.update(1)
                 if num_valids > 0:
                     pbar.set_description(f"Success Rate: {num_successes/num_valids:.04f}")
+
+    if failed_seeds:
+        print(f"\nRetrying {len(failed_seeds)} failed experiments sequentially...")
+        for seed in sorted(failed_seeds):
+            try:
+                result, simulation_pkl_path = demo_with_seed(
+                    seed=seed,
+                    result_dir=result_dir,
+                    recorder_dir=recorder_dir,
+                    parameters=parameters,
+                    rendering=args.render,
+                )
+                v, s = _record_result(result, simulation_pkl_path)
+                num_valids += v
+                num_successes += s
+                print(f"Retry experiment {seed}: ok")
+            except Exception as exc:
+                print(f"Retry experiment {seed} failed again (skipping): {exc}")
 
     if num_valids > 0:
         print(f"Success Rate: {num_successes/num_valids:.04f}")

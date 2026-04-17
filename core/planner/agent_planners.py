@@ -17,7 +17,8 @@ class Agent:
         self.current_task = None
         self.parameters = parameters
         self.observation_deque = deque(maxlen=self.parameters["observation_horizon"])
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        _dev = parameters.get("device", None)
+        self.device = torch.device(_dev) if _dev else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = ConditionalUnet1D(
             input_dim=self.parameters["action_dim"],
             global_cond_dim=self.parameters["observation_dim"]
@@ -121,7 +122,8 @@ class ResolveDualConflict:
         self.parameters = parameters
         self.get_observation_fn = get_observation_fn
         self.preprocess_observation_fn = preprocess_observation_fn
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        _dev = parameters.get("device", None)
+        self.device = torch.device(_dev) if _dev else torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = ConditionalUnet1D(
             input_dim=self.parameters["action_dim"],
             global_cond_dim=self.parameters["observation_dim"]
