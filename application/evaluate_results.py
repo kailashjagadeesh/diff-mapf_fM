@@ -55,6 +55,18 @@ def evaluate_results(df):
     stats["num_plane_collision"] = len(df_plane_collision)
     stats["num_robot_collision"] = len(df_robot_collision)
     stats["success_rate"] = stats["num_success"] / stats["num_valid_exps"]
+
+    for col, key in [
+        ("avg_planning_time", "avg_planning_time_per_call"),
+        ("total_planning_time", "avg_total_planning_time"),
+        ("total_cbs_expanded", "avg_cbs_expanded"),
+        ("total_cbs_rebranch", "avg_cbs_rebranch"),
+        ("total_cbs_repair", "avg_cbs_repair"),
+        ("num_planning_calls", "avg_planning_calls"),
+    ]:
+        if col in df.columns:
+            stats[key] = df[col].mean()
+
     return stats
 
 

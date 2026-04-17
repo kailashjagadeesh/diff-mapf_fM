@@ -265,7 +265,7 @@ dependencies:
       - pyopengl==3.1.0
       - pyquaternion==0.9.9
       - pyrender==0.1.45
-      - python-graphviz==0.21
+      - graphviz==0.21
       - quaternion==3.5.2.post4
       - ray==2.21.0
       - referencing==0.35.1

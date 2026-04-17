@@ -297,6 +297,7 @@ def demo_with_seed(seed, result_dir, recorder_dir, parameters, rendering=False):
     success = False if not executer_success else check_success(targets, plastic_bin)
     p.disconnect()
 
+    pm = executer.planning_metrics
     result = {
         "info": info,
         "experiment": seed,
@@ -304,6 +305,15 @@ def demo_with_seed(seed, result_dir, recorder_dir, parameters, rendering=False):
         "limit": executer.limit,
         "step_count": step_count,
         "simulation_output_path": executer.simulation_output_path,
+        "total_planning_time": pm["total_planning_time"],
+        "num_planning_calls": pm["num_planning_calls"],
+        "avg_planning_time": (
+            pm["total_planning_time"] / pm["num_planning_calls"]
+            if pm["num_planning_calls"] > 0 else 0.0
+        ),
+        "total_cbs_expanded": pm["total_cbs_expanded"],
+        "total_cbs_rebranch": pm["total_cbs_rebranch"],
+        "total_cbs_repair": pm["total_cbs_repair"],
     }
     write_csv_line(result_filepath, result)
     return result, executer.simulation_output_path

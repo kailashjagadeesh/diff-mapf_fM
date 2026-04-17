@@ -29,6 +29,8 @@ class ConflictBasedSearch(BaseSearch):
         self.metrics = {
             "num_expanded": 0,
             "num_generated": 0,
+            "num_rebranch": 0,
+            "num_repair": 0,
             "planning_time": 0.0,
             "num_collision_checks": 0,
         }
@@ -183,6 +185,7 @@ class ConflictBasedSearch(BaseSearch):
                     self._add_graph_edge(current_node, new_node, constraint_label)
 
                     self.metrics["num_generated"] += 1
+                    self.metrics["num_rebranch"] += 1
                     heapq.heappush(self.open_set, new_node)
 
             for B in range(self.parameters["num_samples"]):
@@ -211,10 +214,12 @@ class ConflictBasedSearch(BaseSearch):
                     self._add_graph_edge(current_node, new_node, constraint_label)
 
                     self.metrics["num_generated"] += 1
+                    self.metrics["num_rebranch"] += 1
                     heapq.heappush(self.open_set, new_node)
 
             dual_plan_A = self.dual_agent_planner.predict_plan(conflict, agents_deque)
             if dual_plan_A is not None:
+                self.metrics["num_repair"] += 1
                 for A in range(self.parameters["num_samples"]):
                     new_plan_A = dual_plan_A[A]
                     collision, _, _ = self.check_collisions(
@@ -237,7 +242,6 @@ class ConflictBasedSearch(BaseSearch):
                         self.node_id_counter += 1
 
                         new_node = CBSNode(
-                            # new_indices, current_node.constraints.copy(), new_cost
                             new_indices,
                             updated_constraints.copy(),
                             new_cost,
@@ -257,6 +261,7 @@ class ConflictBasedSearch(BaseSearch):
             conflict = (conflict[1], conflict[0])
             dual_plan_B = self.dual_agent_planner.predict_plan(conflict, agents_deque)
             if dual_plan_B is not None:
+                self.metrics["num_repair"] += 1
                 for B in range(self.parameters["num_samples"]):
                     new_plan_B = dual_plan_B[B]
                     collision, _, _ = self.check_collisions(
@@ -278,7 +283,6 @@ class ConflictBasedSearch(BaseSearch):
                         new_id = self.node_id_counter
                         self.node_id_counter += 1
                         new_node = CBSNode(
-                            # new_indices, current_node.constraints.copy(), new_cost
                             new_indices,
                             updated_constraints.copy(),
                             new_cost,

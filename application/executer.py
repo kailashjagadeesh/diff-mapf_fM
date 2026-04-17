@@ -46,6 +46,13 @@ class Executer:
 
         self.parameters = parameters
         self.num_agents = len(self.ur5s)
+        self.planning_metrics = {
+            "total_planning_time": 0.0,
+            "num_planning_calls": 0,
+            "total_cbs_expanded": 0,
+            "total_cbs_rebranch": 0,
+            "total_cbs_repair": 0,
+        }
 
         backbone = parameters.get("backbone", "diffusion")
         if backbone == "flow":
@@ -122,6 +129,12 @@ class Executer:
                 sim_steps=1.0,
             )
             result = planner.find_plans(self.state_deque)
+            m = planner.metrics
+            self.planning_metrics["total_planning_time"] += m["planning_time"]
+            self.planning_metrics["num_planning_calls"] += 1
+            self.planning_metrics["total_cbs_expanded"] += m["num_expanded"]
+            self.planning_metrics["total_cbs_rebranch"] += m["num_rebranch"]
+            self.planning_metrics["total_cbs_repair"] += m["num_repair"]
         else:
             raise ValueError(f"Unknown search method: {self.parameters['search']}")
 

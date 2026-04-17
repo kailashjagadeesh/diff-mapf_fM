@@ -125,6 +125,13 @@ def parse_args():
         help="Path to the dual agent model",
     )
 
+    parser.add_argument(
+        "--device",
+        type=str,
+        help="PyTorch device string, e.g. 'cuda:0', 'cuda:1', 'cpu'",
+        default=None,
+    )
+
     args = parser.parse_args()
 
     if args.mode == "benchmark":
@@ -154,10 +161,9 @@ def load_config(path):
 
 
 def setup_problem():
-    device = None
     args = parse_args()
     config = load_config(args.config)
-
+    device = args.device  # None means auto-detect in create_agent/create_flow_agent
     return device, args, config
 
 
