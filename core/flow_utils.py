@@ -62,7 +62,7 @@ def create_flow_agent(training_config, device, logger, args, len_dataloader, dat
         writer=logger,
         device=device,
         load_path=args.load,
-        save_interval=training_config.get("save_interval", 10),
+        save_interval=args.save_interval or training_config.get("save_interval", 10),
         grad_norm=args.grad_norm,
         early_stop=args.early_stop,
         len_dataloader=len_dataloader,
