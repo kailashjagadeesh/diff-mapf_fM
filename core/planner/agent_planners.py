@@ -51,8 +51,9 @@ class Agent:
             num_train_timesteps=self.parameters["n_timesteps"],
         )
         self.noise_scheduler.set_timesteps(self.parameters["n_timesteps"])
+        import os as _os
         self.stats = np.load(
-            self.parameters["single_agent_model"].replace(".pth", ".npz"),
+            _os.path.splitext(self.parameters["single_agent_model"])[0] + ".npz",
             allow_pickle=True,
         )
         action_stats = dict(self.stats["actions"].flatten()[0])
@@ -157,8 +158,9 @@ class ResolveDualConflict:
             num_train_timesteps=self.parameters["n_timesteps"],
         )
         self.noise_scheduler.set_timesteps(self.parameters["n_timesteps"])
+        import os as _os
         self.stats = np.load(
-            self.parameters["dual_agent_model"].replace(".pth", ".npz"),
+            _os.path.splitext(self.parameters["dual_agent_model"])[0] + ".npz",
             allow_pickle=True,
         )
         action_stats = dict(self.stats["actions"].flatten()[0])
