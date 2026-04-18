@@ -119,7 +119,11 @@ class Executer:
         ]
 
         if self.parameters["search"] == "cbs":
-            planner = ConflictBasedSearch(
+            if self.parameters.get("cbs_strategy", "standard") == "cardinal":
+                from core.planner.cardinal_cbs import CardinalCBS as _CBSCls
+            else:
+                _CBSCls = ConflictBasedSearch
+            planner = _CBSCls(
                 plans,
                 self.parameters,
                 (

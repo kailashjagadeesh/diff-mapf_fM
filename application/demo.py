@@ -65,6 +65,7 @@ class Parameters:
     n_timesteps: int = 100   # used by diffusion backbone
     n_steps: int = 10        # used by flow matching backbone
     backbone: str = "diffusion"  # "diffusion" | "flow"
+    cbs_strategy: str = "standard"  # "standard" | "cardinal"
     action_horizon: int = 1
     observation_dim: int = 57
     prediction_horizon: int = 16
@@ -337,6 +338,13 @@ if __name__ == "__main__":
         choices=["diffusion", "flow"],
         help="Policy backbone: 'diffusion' (DDPM) or 'flow' (flow matching)",
     )
+    parser.add_argument(
+        "--cbs_strategy",
+        type=str,
+        default="standard",
+        choices=["standard", "cardinal"],
+        help="CBS conflict selection strategy: 'standard' (first-found) or 'cardinal' (cardinality-aware)",
+    )
     parser.add_argument("--action_horizon", type=int, default=1, help="Action horizon")
     parser.add_argument(
         "--observation_dim", type=int, default=57, help="Observation dimension"
@@ -400,6 +408,7 @@ if __name__ == "__main__":
         n_timesteps=args.n_timesteps,
         n_steps=args.n_steps,
         backbone=args.backbone,
+        cbs_strategy=args.cbs_strategy,
         action_horizon=args.action_horizon,
         observation_dim=args.observation_dim,
         dual_agent_model=args.dual_agent_model,
