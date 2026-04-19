@@ -27,7 +27,12 @@ import os
 import glob
 import pickle
 import argparse
+import concurrent.futures
+import functools
+import subprocess
 import numpy as np
+import pkgutil
+from tqdm import tqdm
 
 import pybullet as p
 import pybullet_data
@@ -77,21 +82,31 @@ def render_pkl(
     if output_path is None:
         output_path = os.path.splitext(pkl_path)[0] + ".mp4"
 
-    print(f"Rendering {pkl_path} → {output_path}")
-
     data = pickle.load(open(pkl_path, "rb"))
     if not data:
-        print("  [skip] empty recording")
+        tqdm.write(f"[skip] empty recording: {pkl_path}")
         return
 
     num_frames = len(next(iter(data.values()))["frames"])
     if num_frames == 0:
-        print("  [skip] no frames")
+        tqdm.write(f"[skip] no frames: {pkl_path}")
         return
 
     # Connect headlessly
-    renderer_flag = p.ER_EGL_OPENGL if use_egl else p.ER_TINY_RENDERER
     p.connect(p.DIRECT)
+    
+    renderer_flag = p.ER_TINY_RENDERER
+    if use_egl:
+        renderer_flag = p.ER_BULLET_HARDWARE_OPENGL
+        
+        # Load the EGL plugin for headless GPU rendering
+        egl = pkgutil.get_loader("eglRenderer")
+        if egl is not None:
+            p.loadPlugin(egl.get_filename(), "_eglRendererPlugin")
+        else:
+            print("Warning: eglRenderer plugin not found. Falling back to software rendering.")
+            renderer_flag = p.ER_TINY_RENDERER
+
     p.setAdditionalSearchPath(pybullet_data.getDataPath())
 
     # Load one MultiBody per link visual stored in the recording
@@ -122,35 +137,64 @@ def render_pkl(
         width, height, yaw, pitch, dist, target
     )
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    ffmpeg_cmd = [
+        "ffmpeg", "-y",
+        "-f", "rawvideo", "-vcodec", "rawvideo",
+        "-s", f"{width}x{height}",
+        "-pix_fmt", "bgr24",
+        "-r", str(fps),
+        "-i", "-",
+        "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+        "-pix_fmt", "yuv420p",
+        output_path,
+    ]
+    proc = subprocess.Popen(ffmpeg_cmd, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    for frame_idx in range(num_frames):
-        for name, obj in data.items():
-            body_id = body_map.get(name)
-            if body_id is None:
-                continue
-            frame = obj["frames"][frame_idx]
-            p.resetBasePositionAndOrientation(
-                body_id, frame["position"], frame["orientation"]
-            )
+    fname = os.path.basename(pkl_path)
+    try:
+        with tqdm(total=num_frames, desc=fname, unit="fr", leave=True, position=None) as pbar:
+            for frame_idx in range(num_frames):
+                for name, obj in data.items():
+                    body_id = body_map.get(name)
+                    if body_id is None:
+                        continue
+                    frame = obj["frames"][frame_idx]
+                    p.resetBasePositionAndOrientation(
+                        body_id, frame["position"], frame["orientation"]
+                    )
 
-        _, _, rgba_px, _, _ = p.getCameraImage(
-            width,
-            height,
-            view_matrix,
-            proj_matrix,
-            renderer=renderer_flag,
-        )
+                _, _, rgba_px, _, _ = p.getCameraImage(
+                    width,
+                    height,
+                    view_matrix,
+                    proj_matrix,
+                    renderer=renderer_flag,
+                )
 
-        rgb = np.array(rgba_px, dtype=np.uint8).reshape(height, width, 4)[:, :, :3]
-        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-        writer.write(bgr)
+                rgb = np.array(rgba_px, dtype=np.uint8).reshape(height, width, 4)[:, :, :3]
+                bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                proc.stdin.write(bgr.tobytes())
+                pbar.update(1)
 
-    writer.release()
-    p.disconnect()
-    print(f"  Saved ({num_frames} frames, {num_frames/fps:.1f}s) → {output_path}")
+        proc.stdin.close()
+        proc.wait()
+        if proc.returncode != 0:
+            ffmpeg_err = proc.stderr.read().decode(errors="replace")
+            tqdm.write(f"  [error] ffmpeg exited {proc.returncode} for {pkl_path}:\n{ffmpeg_err}")
+            return
+    except BrokenPipeError:
+        ffmpeg_err = proc.stderr.read().decode(errors="replace")
+        proc.wait()
+        tqdm.write(f"  [error] ffmpeg crashed on {pkl_path}:\n{ffmpeg_err}")
+        return
+    finally:
+        try:
+            p.disconnect()
+        except Exception:
+            pass
+
+    tqdm.write(f"  Saved ({num_frames} fr, {num_frames/fps:.1f}s) → {output_path}")
 
 
 def main():
@@ -174,6 +218,7 @@ def main():
     parser.add_argument("--yaw", type=float, default=_DEFAULT_YAW, help="Camera yaw (degrees)")
     parser.add_argument("--pitch", type=float, default=_DEFAULT_PITCH, help="Camera pitch (degrees)")
     parser.add_argument("--dist", type=float, default=_DEFAULT_DIST, help="Camera distance from target")
+    parser.add_argument("--num_workers", type=int, default=1, help="Parallel render workers (batch mode only)")
 
     args = parser.parse_args()
 
@@ -194,9 +239,14 @@ def main():
         if not pkls:
             print(f"No .pkl files found under {args.pkl_dir}")
             return
-        print(f"Found {len(pkls)} file(s) to render")
-        for pkl_path in pkls:
-            render_pkl(pkl_path, **kwargs)
+        print(f"Found {len(pkls)} file(s) to render with {args.num_workers} worker(s)")
+        _render = functools.partial(render_pkl, **kwargs)
+        if args.num_workers <= 1:
+            for pkl_path in pkls:
+                _render(pkl_path)
+        else:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=args.num_workers) as ex:
+                list(ex.map(_render, pkls))
 
 
 if __name__ == "__main__":
