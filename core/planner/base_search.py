@@ -42,7 +42,7 @@ class BaseSearch:
             cost += pos_res + ori_res
         for agent_A in range(self.num_agents):
             for agent_B in range(agent_A + 1, self.num_agents):
-                key = tuple(plan_indices)
+                key = (tuple(plan_indices), agent_A, agent_B)
                 if key not in self.collision_cache:
                     self.collision_cache[key] = self.check_collisions(
                         (agent_A, plans[agent_A]), (agent_B, plans[agent_B])

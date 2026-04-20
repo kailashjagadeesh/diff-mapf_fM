@@ -161,28 +161,12 @@ class CardinalCBS(ConflictBasedSearch):
                 self.metrics["planning_time"] = time.time() - start_time
                 return plan, earliest_collision_time
 
-            # Pick conflict at earliest timestep
+            # Pick conflict at earliest timestep; agent indices are stored directly in the tuple
             chosen = min(all_conflicts, key=lambda c: c[0])
-            collision_bodies = chosen[3]
-
-            # Map pybullet body IDs back to agent indices
-            agent_A = None
-            agent_B = None
-            for i in range(self.num_agents):
-                if (
-                    collision_bodies[0]
-                    and self.single_agent_planners[i].pybullet_id == collision_bodies[0]
-                ):
-                    agent_A = i
-                if (
-                    collision_bodies[1]
-                    and self.single_agent_planners[i].pybullet_id == collision_bodies[1]
-                ):
-                    agent_B = i
-            if agent_A is None or agent_B is None:
-                return base_plan, earliest_collision_time
-
+            agent_A = chosen[1]
+            agent_B = chosen[2]
             conflict = (agent_A, agent_B)
+            print(f"[CardinalCBS DEBUG] conflict detected: agents ({agent_A},{agent_B}), t={chosen[0]}, node {current_node.id}, plan_indices {current_node.plan_indices}", flush=True)
 
             updated_constraints = current_node.constraints.copy()
             updated_constraints.setdefault(agent_A, set()).add(
@@ -203,6 +187,7 @@ class CardinalCBS(ConflictBasedSearch):
             do_rebranch_A = not cardinal_A
             do_rebranch_B = not cardinal_B
             do_repair = cardinal_A or cardinal_B
+            print(f"[CardinalCBS DEBUG] classification: cardinal_A={cardinal_A}, cardinal_B={cardinal_B}, density={density:.2f} → rebranch_A={do_rebranch_A}, rebranch_B={do_rebranch_B}, repair={do_repair}", flush=True)
 
             # Rebranch agent_A
             if do_rebranch_A:
@@ -264,9 +249,11 @@ class CardinalCBS(ConflictBasedSearch):
 
             # Repair via dual model (only when at least one arm is cardinal)
             if do_repair:
+                print(f"[CardinalCBS DEBUG] calling repair for agent_A={conflict[0]} (ego)", flush=True)
                 dual_plan_A = self.dual_agent_planner.predict_plan(conflict, agents_deque)
                 if dual_plan_A is not None:
                     self.metrics["num_repair"] += 1
+                    print(f"[CardinalCBS DEBUG] repair returned plan for agent_A={conflict[0]}", flush=True)
                     for A in range(self.parameters["num_samples"]):
                         new_plan_A = dual_plan_A[A]
                         collision, _, _ = self.check_collisions(
@@ -302,11 +289,13 @@ class CardinalCBS(ConflictBasedSearch):
                             heapq.heappush(self.open_set, new_node)
 
                 conflict_reversed = (conflict[1], conflict[0])
+                print(f"[CardinalCBS DEBUG] calling repair for agent_B={conflict_reversed[0]} (ego)", flush=True)
                 dual_plan_B = self.dual_agent_planner.predict_plan(
                     conflict_reversed, agents_deque
                 )
                 if dual_plan_B is not None:
                     self.metrics["num_repair"] += 1
+                    print(f"[CardinalCBS DEBUG] repair returned plan for agent_B={conflict_reversed[0]}", flush=True)
                     for B in range(self.parameters["num_samples"]):
                         new_plan_B = dual_plan_B[B]
                         collision, _, _ = self.check_collisions(

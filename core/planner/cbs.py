@@ -86,18 +86,20 @@ class ConflictBasedSearch(BaseSearch):
                 for i in range(self.num_agents)
             ]
 
-            conflict = None
             conflict_found = False
-            for agent_A in range(self.num_agents):
-                for agent_B in range(agent_A + 1, self.num_agents):
-                    key = tuple(current_node.plan_indices)
+            agent_A = None
+            agent_B = None
+            for _a in range(self.num_agents):
+                for _b in range(_a + 1, self.num_agents):
+                    key = (tuple(current_node.plan_indices), _a, _b)
                     if key not in self.collision_cache:
                         self.collision_cache[key] = self.check_collisions(
-                            (agent_A, plan[agent_A]), (agent_B, plan[agent_B])
+                            (_a, plan[_a]), (_b, plan[_b])
                         )
                     if self.collision_cache[key][0]:
                         conflict_found = True
-                        conflict = self.collision_cache[key][2]
+                        agent_A = _a
+                        agent_B = _b
                         if self.collision_cache[key][1] != -1:
                             if self.collision_cache[key][1] < earliest_collision_time:
                                 earliest_collision_time = self.collision_cache[key][1]
@@ -131,24 +133,9 @@ class ConflictBasedSearch(BaseSearch):
                 self.metrics["planning_time"] = time.time() - start_time
                 return plan, earliest_collision_time
 
-            assert conflict is not None
-            agent_A = None
-            agent_B = None
-            for i in range(self.num_agents):
-                if (
-                    conflict[0]
-                    and self.single_agent_planners[i].pybullet_id == conflict[0]
-                ):
-                    agent_A = i
-                if (
-                    conflict[1]
-                    and self.single_agent_planners[i].pybullet_id == conflict[1]
-                ):
-                    agent_B = i
-            if agent_A is None or agent_B is None:
-                # We are colliding with some object who we cannot control
-                return base_plan, earliest_collision_time
+            assert agent_A is not None and agent_B is not None
             conflict = (agent_A, agent_B)
+            print(f"[CBS DEBUG] conflict detected: agents ({agent_A},{agent_B}), node {current_node.id}, plan_indices {current_node.plan_indices}", flush=True)
 
             updated_constraints = current_node.constraints.copy()
             updated_constraints.setdefault(agent_A, set()).add(
@@ -158,6 +145,7 @@ class ConflictBasedSearch(BaseSearch):
                 current_node.plan_indices[agent_B]
             )
 
+            print(f"[CBS DEBUG] rebranching agent_A={agent_A} (constrained={updated_constraints.get(agent_A)})", flush=True)
             for A in range(self.parameters["num_samples"]):
                 if A not in updated_constraints[agent_A]:
                     new_indices = current_node.plan_indices.copy()
@@ -188,6 +176,7 @@ class ConflictBasedSearch(BaseSearch):
                     self.metrics["num_rebranch"] += 1
                     heapq.heappush(self.open_set, new_node)
 
+            print(f"[CBS DEBUG] rebranching agent_B={agent_B} (constrained={updated_constraints.get(agent_B)})", flush=True)
             for B in range(self.parameters["num_samples"]):
                 if B not in updated_constraints[agent_B]:
                     new_indices = current_node.plan_indices.copy()
@@ -217,9 +206,11 @@ class ConflictBasedSearch(BaseSearch):
                     self.metrics["num_rebranch"] += 1
                     heapq.heappush(self.open_set, new_node)
 
+            print(f"[CBS DEBUG] calling repair for agent_A={conflict[0]} (ego)", flush=True)
             dual_plan_A = self.dual_agent_planner.predict_plan(conflict, agents_deque)
             if dual_plan_A is not None:
                 self.metrics["num_repair"] += 1
+                print(f"[CBS DEBUG] repair returned plan for agent_A={conflict[0]}", flush=True)
                 for A in range(self.parameters["num_samples"]):
                     new_plan_A = dual_plan_A[A]
                     collision, _, _ = self.check_collisions(
@@ -259,9 +250,11 @@ class ConflictBasedSearch(BaseSearch):
                         heapq.heappush(self.open_set, new_node)
 
             conflict = (conflict[1], conflict[0])
+            print(f"[CBS DEBUG] calling repair for agent_B={conflict[0]} (ego)", flush=True)
             dual_plan_B = self.dual_agent_planner.predict_plan(conflict, agents_deque)
             if dual_plan_B is not None:
                 self.metrics["num_repair"] += 1
+                print(f"[CBS DEBUG] repair returned plan for agent_B={conflict[0]}", flush=True)
                 for B in range(self.parameters["num_samples"]):
                     new_plan_B = dual_plan_B[B]
                     collision, _, _ = self.check_collisions(
