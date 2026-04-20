@@ -11,3 +11,5 @@ application/runs/plain_diffusion/results_2026-04-18_18-03-20 - pretrained - card
 new set of runs:
 /usr1/kj_codebase/ipl_project/diff-mapf_fM/runs/diffusion_dual_agent/2026-04-17_17-15-49/results_2026-04-20_19-39-57 - diffusion - trained weights - standard cbs
 /usr1/kj_codebase/ipl_project/diff-mapf_fM/runs/diffusion_dual_agent/2026-04-17_17-15-49/results_2026-04-20_22-19-56 - diffusion - trained weights - cardinal cbs
+/home/ankit-tmp/ipl_project/diff-mapf_fM/runs/flow_dual_agent/2026-04-17_17-16-30/results_2026-04-20_18-24-36 - flow matching - trained weights - standard cbs
+/home/ankit-tmp/ipl_project/diff-mapf_fM/runs/flow_dual_agent/2026-04-17_17-16-30/results_2026-04-20_18-26-59 -flow matching - trained weights - cardinal cbs
